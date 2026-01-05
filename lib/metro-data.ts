@@ -74,8 +74,8 @@ export const lines: Line[] = [
       "phoolbagan",
       "sealdah",
       "esplanade",
-      "howrah-maidan",
       "howrah",
+      "howrah-maidan",
     ],
   },
   {
@@ -156,8 +156,8 @@ export const stations: Station[] = [
   { id: "phoolbagan", name: "Phoolbagan", lines: ["green"], x: 270, y: 370, isInterchange: false },
   { id: "sealdah", name: "Sealdah", lines: ["green", "yellow"], x: 240, y: 370, isInterchange: true },
   // esplanade already defined above
-  { id: "howrah-maidan", name: "Howrah Maidan", lines: ["green"], x: 140, y: 370, isInterchange: false },
-  { id: "howrah", name: "Howrah", lines: ["green"], x: 100, y: 370, isInterchange: false },
+  { id: "howrah", name: "Howrah", lines: ["green"], x: 140, y: 370, isInterchange: false },
+  { id: "howrah-maidan", name: "Howrah Maidan", lines: ["green"], x: 100, y: 370, isInterchange: false },
 
   // Line 3 (Purple) - South extension
   { id: "joka", name: "Joka", lines: ["purple"], x: 120, y: 650, isInterchange: false },
