@@ -35,7 +35,7 @@ A modern, interactive web application for planning journeys across the Kolkata M
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/rachts/kolkata-metro-planner.git
+   git clone https://github.com/rachts/kolkata-metro.git
    cd kolkata-metro-planner
    ```
 
