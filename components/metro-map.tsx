@@ -1,9 +1,13 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import type React from "react"
+
+import { useState, useCallback, useRef } from "react"
 import { stations, lines, type LineId, type Station } from "@/lib/metro-data"
 import type { RouteResult } from "@/lib/route-calculator"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { ZoomIn, ZoomOut, RotateCcw, Move } from "lucide-react"
 
 interface MetroMapProps {
   selectedSource: string | null
@@ -31,6 +35,13 @@ export function MetroMap({
 }: MetroMapProps) {
   const [hoveredStation, setHoveredStation] = useState<string | null>(null)
 
+  const [scale, setScale] = useState(1)
+  const [position, setPosition] = useState({ x: 0, y: 0 })
+  const [isDragging, setIsDragging] = useState(false)
+  const lastTouchRef = useRef<{ x: number; y: number } | null>(null)
+  const lastPinchDistRef = useRef<number | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
   const isStationOnRoute = useCallback(
     (stationId: string) => {
       if (!route) return false
@@ -38,6 +49,98 @@ export function MetroMap({
     },
     [route],
   )
+
+  const handleZoomIn = () => {
+    setScale((s) => Math.min(s * 1.3, 4))
+  }
+
+  const handleZoomOut = () => {
+    setScale((s) => Math.max(s / 1.3, 0.5))
+  }
+
+  const handleReset = () => {
+    setScale(1)
+    setPosition({ x: 0, y: 0 })
+  }
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      lastTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+      setIsDragging(true)
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
+      lastPinchDistRef.current = dist
+    }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 1 && lastTouchRef.current && isDragging) {
+      const deltaX = e.touches[0].clientX - lastTouchRef.current.x
+      const deltaY = e.touches[0].clientY - lastTouchRef.current.y
+      setPosition((p) => ({ x: p.x + deltaX, y: p.y + deltaY }))
+      lastTouchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    } else if (e.touches.length === 2 && lastPinchDistRef.current) {
+      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
+      const delta = dist / lastPinchDistRef.current
+      setScale((s) => Math.min(Math.max(s * delta, 0.5), 4))
+      lastPinchDistRef.current = dist
+    }
+  }
+
+  const handleTouchEnd = () => {
+    lastTouchRef.current = null
+    lastPinchDistRef.current = null
+    setIsDragging(false)
+  }
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 0) {
+      lastTouchRef.current = { x: e.clientX, y: e.clientY }
+      setIsDragging(true)
+    }
+  }
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging && lastTouchRef.current) {
+      const deltaX = e.clientX - lastTouchRef.current.x
+      const deltaY = e.clientY - lastTouchRef.current.y
+      setPosition((p) => ({ x: p.x + deltaX, y: p.y + deltaY }))
+      lastTouchRef.current = { x: e.clientX, y: e.clientY }
+    }
+  }
+
+  const handleMouseUp = () => {
+    lastTouchRef.current = null
+    setIsDragging(false)
+  }
+
+  const zoomToRoute = useCallback(() => {
+    if (!route || route.path.length === 0) return
+
+    const xs = route.path.map((s) => s.x)
+    const ys = route.path.map((s) => s.y)
+    const minX = Math.min(...xs)
+    const maxX = Math.max(...xs)
+    const minY = Math.min(...ys)
+    const maxY = Math.max(...ys)
+
+    const centerX = (minX + maxX) / 2
+    const centerY = (minY + maxY) / 2
+
+    // Calculate scale to fit route with padding
+    const routeWidth = maxX - minX + 100
+    const routeHeight = maxY - minY + 100
+    const newScale = Math.min(550 / routeWidth, 750 / routeHeight, 2.5)
+
+    setScale(newScale)
+    // Center on the route
+    const containerWidth = containerRef.current?.clientWidth || 400
+    const containerHeight = containerRef.current?.clientHeight || 500
+    setPosition({
+      x: containerWidth / 2 - centerX * newScale,
+      y: containerHeight / 2 - centerY * newScale,
+    })
+  }, [route])
 
   const renderLines = () => {
     return lines.map((line) => {
@@ -105,7 +208,7 @@ export function MetroMap({
           <circle
             cx={station.x}
             cy={station.y}
-            r={20}
+            r={24}
             fill="transparent"
             className="cursor-pointer"
             onMouseEnter={() => setHoveredStation(station.id)}
@@ -147,7 +250,7 @@ export function MetroMap({
             className={cn("pointer-events-none transition-all duration-200", isOnRoute && "drop-shadow-lg")}
           />
 
-          {/* Station name label - Slightly larger text for readability */}
+          {/* Station name label */}
           <text
             x={station.x + (station.x > 250 ? -12 : 16)}
             y={station.y + 4}
@@ -166,8 +269,18 @@ export function MetroMap({
   }
 
   return (
-    <div className="relative w-full h-full bg-card rounded-lg border border-border overflow-hidden touch-pan-x touch-pan-y">
-      {/* Selection mode indicator - More compact on mobile */}
+    <div
+      ref={containerRef}
+      className="relative w-full h-full bg-card rounded-lg border border-border overflow-hidden"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
+      {/* Selection mode indicator */}
       <div className="absolute top-2 left-2 z-10 px-2 py-1 sm:px-3 sm:py-1.5 bg-background/90 backdrop-blur-sm rounded-md text-[10px] sm:text-xs font-medium border border-border">
         {isSelectingSource ? (
           <span className="text-green-600 dark:text-green-400">● Select Source</span>
@@ -176,7 +289,58 @@ export function MetroMap({
         )}
       </div>
 
-      <svg viewBox="0 0 550 750" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+      <div className="absolute top-2 right-2 z-10 flex flex-col gap-1">
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8 bg-background/90 backdrop-blur-sm"
+          onClick={handleZoomIn}
+        >
+          <ZoomIn className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8 bg-background/90 backdrop-blur-sm"
+          onClick={handleZoomOut}
+        >
+          <ZoomOut className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8 bg-background/90 backdrop-blur-sm"
+          onClick={handleReset}
+        >
+          <RotateCcw className="h-4 w-4" />
+        </Button>
+        {route && (
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 bg-background/90 backdrop-blur-sm"
+            onClick={zoomToRoute}
+            title="Zoom to route"
+          >
+            <Move className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+
+      <div className="absolute bottom-12 left-2 z-10 px-2 py-1 bg-background/80 backdrop-blur-sm rounded text-[9px] text-muted-foreground border border-border sm:hidden">
+        Pinch to zoom • Drag to pan
+      </div>
+
+      <svg
+        viewBox="0 0 550 750"
+        className="w-full h-full transition-transform duration-100"
+        preserveAspectRatio="xMidYMid meet"
+        style={{
+          transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+          transformOrigin: "0 0",
+          cursor: isDragging ? "grabbing" : "grab",
+        }}
+      >
         {/* Background grid */}
         <defs>
           <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
@@ -195,7 +359,7 @@ export function MetroMap({
         <g className="stations">{renderStations()}</g>
       </svg>
 
-      {/* Legend - More compact and repositioned for mobile */}
+      {/* Legend */}
       <div className="absolute bottom-2 right-2 bg-background/90 backdrop-blur-sm rounded-md p-1.5 sm:p-2 text-[10px] sm:text-xs border border-border">
         <div className="font-medium mb-1 text-foreground">Lines</div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 sm:grid-cols-1 sm:gap-1">
